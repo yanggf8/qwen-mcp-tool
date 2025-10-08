@@ -29,6 +29,10 @@ npm install
 npm start
 ```
 
+## Fixes
+
+- Fixed MCP error -32602: Resolved output schema mismatch in `ask-qwen` and `sandbox-test` tools where the returned values didn't match the declared output schemas.
+
 ## License
 
 MIT

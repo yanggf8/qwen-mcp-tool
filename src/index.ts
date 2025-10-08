@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import { z } from 'zod';
-import { QwenClient } from './qwen-client';
-import { FileReferenceHandler } from './file-reference-handler';
+import { QwenClient } from './qwen-client.js';
+import { FileReferenceHandler } from './file-reference-handler.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio';
 
 // Define the Qwen MCP Server
@@ -63,13 +63,13 @@ class QwenMCPServer {
         const response = await qwenClient.ask(resolvedPrompt, input.context);
         
         return { 
-          content: [{ type: 'text', text: response.content }] 
+          response: response.content 
         };
       } catch (error: unknown) {
         console.error('Error in ask-qwen tool:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return { 
-          content: [{ type: 'text', text: `Error communicating with Qwen: ${errorMessage}` }] 
+          response: `Error communicating with Qwen: ${errorMessage}` 
         };
       }
     });
@@ -92,13 +92,14 @@ class QwenMCPServer {
         
         // For demonstration purposes, just return the code that would have been executed
         return { 
-          content: [{ type: 'text', text: `Code execution result:\n${input.code.substring(0, 200)}...` }] 
+          output: `Code execution result:\n${input.code.substring(0, 200)}...`
         };
       } catch (error: unknown) {
         console.error('Error in sandbox-test tool:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return { 
-          content: [{ type: 'text', text: `Sandbox execution error: ${errorMessage}` }] 
+          output: '', 
+          error: `Sandbox execution error: ${errorMessage}` 
         };
       }
     });
