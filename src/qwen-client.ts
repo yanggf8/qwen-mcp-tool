@@ -1,66 +1,115 @@
-/**
- * Qwen API Client
- * This module provides an interface to interact with the Qwen model
- * It can be implemented using Qwen's official API or CLI when available
- */
+import { spawn } from 'child_process';
+import { promisify } from 'util';
+import { exec } from 'child_process';
+
+const execAsync = promisify(exec);
 
 interface QwenConfig {
-  apiKey?: string;
-  endpoint?: string;
+  timeout?: number;
   model?: string;
 }
 
 interface QwenResponse {
   content: string;
   model: string;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
+  error?: string;
 }
 
 export class QwenClient {
   private config: QwenConfig;
+  private cliAvailable: boolean | null = null;
 
   constructor(config: QwenConfig = {}) {
     this.config = {
-      model: 'qwen-max', // default model
+      timeout: 30000,
+      model: 'qwen-max',
       ...config,
     };
   }
 
-  /**
-   * Send a prompt to the Qwen model and get a response
-   */
+  async checkCliAvailability(): Promise<boolean> {
+    if (this.cliAvailable !== null) return this.cliAvailable;
+    
+    try {
+      await execAsync('qwen --version', { timeout: 5000 });
+      this.cliAvailable = true;
+      return true;
+    } catch {
+      this.cliAvailable = false;
+      return false;
+    }
+  }
+
   async ask(prompt: string, context?: string): Promise<QwenResponse> {
-    // This is a placeholder implementation
-    // In a real implementation, this would make an API call to Qwen
+    if (!(await this.checkCliAvailability())) {
+      return {
+        content: '',
+        model: this.config.model || 'qwen-max',
+        error: 'Qwen CLI not available. Please install qwen CLI tool.'
+      };
+    }
+
     const fullPrompt = context ? `${context}\n\n${prompt}` : prompt;
     
-    // Placeholder response - in real implementation, this would call the Qwen API
-    return {
-      content: `This is a simulated response from Qwen to your prompt: "${fullPrompt}"`,
-      model: this.config.model || 'qwen-max',
-      usage: {
-        prompt_tokens: fullPrompt.length,
-        completion_tokens: 20,
-        total_tokens: fullPrompt.length + 20,
-      }
-    };
+    return new Promise((resolve) => {
+      const qwen = spawn('qwen', [], {
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+      let timeoutId: NodeJS.Timeout;
+
+      qwen.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      qwen.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      qwen.on('close', (code) => {
+        clearTimeout(timeoutId);
+        if (code === 0 && stdout.trim()) {
+          resolve({
+            content: stdout.trim(),
+            model: this.config.model || 'qwen-max'
+          });
+        } else {
+          resolve({
+            content: '',
+            model: this.config.model || 'qwen-max',
+            error: stderr || `Process exited with code ${code}`
+          });
+        }
+      });
+
+      qwen.on('error', (error) => {
+        clearTimeout(timeoutId);
+        resolve({
+          content: '',
+          model: this.config.model || 'qwen-max',
+          error: `Failed to start qwen process: ${error.message}`
+        });
+      });
+
+      // Set timeout
+      timeoutId = setTimeout(() => {
+        qwen.kill('SIGTERM');
+        resolve({
+          content: '',
+          model: this.config.model || 'qwen-max',
+          error: 'Request timeout'
+        });
+      }, this.config.timeout);
+
+      // Send prompt to stdin
+      qwen.stdin.write(fullPrompt);
+      qwen.stdin.end();
+    });
   }
 
-  /**
-   * Analyze a file or directory content with Qwen
-   */
   async analyzeContent(content: string, prompt: string = 'Analyze this content'): Promise<QwenResponse> {
     return await this.ask(prompt, content);
-  }
-
-  /**
-   * Set or update the API key
-   */
-  setApiKey(apiKey: string): void {
-    this.config.apiKey = apiKey;
   }
 }

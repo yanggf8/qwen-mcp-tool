@@ -53,14 +53,20 @@ class QwenMCPServer {
         
         // Create a Qwen client instance
         const qwenClient = new QwenClient({
-          apiKey: process.env.QWEN_API_KEY, // Use API key from environment if available
+          timeout: 30000
         });
         
         // Get response from Qwen
         const response = await qwenClient.ask(resolvedPrompt, input.context);
         
+        if (response.error) {
+          return { 
+            content: [{ type: 'text', text: `Error: ${response.error}` }]
+          };
+        }
+        
         return { 
-          content: [{ type: 'text', text: response.content }]
+          content: [{ type: 'text', text: response.content || 'No response from Qwen' }]
         };
       } catch (error: unknown) {
         console.error('Error in ask-qwen tool:', error);
