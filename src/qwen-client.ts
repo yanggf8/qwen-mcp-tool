@@ -7,6 +7,8 @@ const execAsync = promisify(exec);
 interface QwenConfig {
   timeout?: number;
   model?: string;
+  maxRetries?: number;
+  retryDelay?: number;
 }
 
 interface QwenResponse {
@@ -23,6 +25,8 @@ export class QwenClient {
     this.config = {
       timeout: 45000, // Increase to 45s to be safe
       model: 'qwen-max',
+      maxRetries: 3,
+      retryDelay: 1000, // 1 second delay between retries
       ...config,
     };
   }
@@ -45,14 +49,54 @@ export class QwenClient {
       return {
         content: '',
         model: this.config.model || 'qwen-max',
-        error: 'Qwen CLI not available. Please install qwen CLI tool.'
+        error: `Qwen CLI not available. Please install the qwen CLI tool:\n\n` +
+                `Installation options:\n` +
+                `1. npm install -g @qwen/cli\n` +
+                `2. Download from https://github.com/qwen-cli/qwen-cli\n` +
+                `3. pip install qwen-cli\n\n` +
+                `After installation, run 'qwen --version' to verify the installation.`
       };
     }
 
     const fullPrompt = context ? `${context}\n\n${prompt}` : prompt;
     console.log(`[QwenClient] Starting qwen process for prompt: "${fullPrompt.substring(0, 50)}..."`);
     console.log(`[QwenClient] Command: qwen -p "${fullPrompt}"`);
-    
+
+    // Implement retry mechanism
+    for (let attempt = 1; attempt <= this.config.maxRetries!; attempt++) {
+      console.log(`[QwenClient] Attempt ${attempt} of ${this.config.maxRetries}`);
+
+      try {
+        const result = await this.executeQwenProcess(fullPrompt);
+        if (!result.error || result.error.includes('Process exited with code 0')) {
+          return result;
+        }
+
+        console.log(`[QwenClient] Attempt ${attempt} failed: ${result.error}`);
+
+        if (attempt < this.config.maxRetries!) {
+          console.log(`[QwenClient] Retrying in ${this.config.retryDelay}ms...`);
+          await this.sleep(this.config.retryDelay!);
+        }
+      } catch (error) {
+        console.log(`[QwenClient] Attempt ${attempt} threw error:`, error);
+
+        if (attempt < this.config.maxRetries!) {
+          console.log(`[QwenClient] Retrying in ${this.config.retryDelay}ms...`);
+          await this.sleep(this.config.retryDelay!);
+        }
+      }
+    }
+
+    // All retries failed
+    return {
+      content: '',
+      model: this.config.model || 'qwen-max',
+      error: `Failed after ${this.config.maxRetries} attempts. Please check your connection and try again.`
+    };
+  }
+
+  private async executeQwenProcess(fullPrompt: string): Promise<QwenResponse> {
     return new Promise((resolve) => {
       const startTime = Date.now();
       // Use -p flag for non-interactive mode
@@ -112,10 +156,10 @@ export class QwenClient {
         });
       });
 
-      // Set timeout
+      // Enhanced timeout handling with graceful cleanup
       timeoutId = setTimeout(() => {
-        console.log(`[QwenClient] Timeout after ${this.config.timeout}ms, killing process`);
-        qwen.kill('SIGKILL'); // Use SIGKILL to force termination
+        console.log(`[QwenClient] Timeout after ${this.config.timeout}ms, cleaning up process`);
+        this.cleanupProcess(qwen);
         resolveOnce({
           content: '',
           model: this.config.model || 'qwen-max',
@@ -125,6 +169,28 @@ export class QwenClient {
 
       console.log(`[QwenClient] Started qwen process with PID: ${qwen.pid}`);
     });
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private cleanupProcess(process: any): void {
+    try {
+      // Try graceful termination first
+      process.kill('SIGTERM');
+
+      // Force kill after 1 second if still alive
+      setTimeout(() => {
+        try {
+          process.kill('SIGKILL');
+        } catch (e) {
+          // Process already terminated
+        }
+      }, 1000);
+    } catch (e) {
+      // Process already terminated
+    }
   }
 
   async analyzeContent(content: string, prompt: string = 'Analyze this content'): Promise<QwenResponse> {
