@@ -21,7 +21,7 @@ export class QwenClient {
 
   constructor(config: QwenConfig = {}) {
     this.config = {
-      timeout: 30000, // Reduced back to 30s for non-interactive mode
+      timeout: 45000, // Increase to 45s to be safe
       model: 'qwen-max',
       ...config,
     };
@@ -50,12 +50,14 @@ export class QwenClient {
     }
 
     const fullPrompt = context ? `${context}\n\n${prompt}` : prompt;
-    console.log(`[QwenClient] Starting qwen process for prompt: ${fullPrompt.substring(0, 100)}...`);
+    console.log(`[QwenClient] Starting qwen process for prompt: "${fullPrompt.substring(0, 50)}..."`);
+    console.log(`[QwenClient] Command: qwen -p "${fullPrompt}"`);
     
     return new Promise((resolve) => {
+      const startTime = Date.now();
       // Use -p flag for non-interactive mode
       const qwen = spawn('qwen', ['-p', fullPrompt], {
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'] // ignore stdin since we're not using it
       });
 
       let stdout = '';
@@ -67,22 +69,26 @@ export class QwenClient {
         if (!resolved) {
           resolved = true;
           clearTimeout(timeoutId);
+          const elapsed = Date.now() - startTime;
+          console.log(`[QwenClient] Resolved after ${elapsed}ms`);
           resolve(result);
         }
       };
 
       qwen.stdout.on('data', (data) => {
-        stdout += data.toString();
-        console.log(`[QwenClient] Received stdout: ${data.toString().substring(0, 100)}...`);
+        const chunk = data.toString();
+        stdout += chunk;
+        console.log(`[QwenClient] Stdout chunk (${chunk.length} chars): ${chunk.substring(0, 100)}...`);
       });
 
       qwen.stderr.on('data', (data) => {
-        stderr += data.toString();
-        console.log(`[QwenClient] Received stderr: ${data.toString()}`);
+        const chunk = data.toString();
+        stderr += chunk;
+        console.log(`[QwenClient] Stderr chunk: ${chunk}`);
       });
 
       qwen.on('close', (code) => {
-        console.log(`[QwenClient] Process closed with code: ${code}`);
+        console.log(`[QwenClient] Process closed with code: ${code}, stdout length: ${stdout.length}`);
         if (code === 0 && stdout.trim()) {
           resolveOnce({
             content: stdout.trim(),
@@ -108,8 +114,8 @@ export class QwenClient {
 
       // Set timeout
       timeoutId = setTimeout(() => {
-        console.log(`[QwenClient] Timeout after ${this.config.timeout}ms`);
-        qwen.kill('SIGTERM');
+        console.log(`[QwenClient] Timeout after ${this.config.timeout}ms, killing process`);
+        qwen.kill('SIGKILL'); // Use SIGKILL to force termination
         resolveOnce({
           content: '',
           model: this.config.model || 'qwen-max',
@@ -117,7 +123,7 @@ export class QwenClient {
         });
       }, this.config.timeout);
 
-      console.log(`[QwenClient] Started qwen process with -p flag`);
+      console.log(`[QwenClient] Started qwen process with PID: ${qwen.pid}`);
     });
   }
 
