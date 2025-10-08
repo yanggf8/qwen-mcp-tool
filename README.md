@@ -34,7 +34,7 @@ npm start
 - **Real Qwen CLI Integration**: Implemented actual qwen CLI subprocess calls replacing placeholder responses
 - **CLI Availability Validation**: Added automatic detection and validation of qwen CLI installation
 - **Robust Error Handling**: Comprehensive subprocess error handling with timeouts and cleanup
-- **Timeout Optimization**: Increased timeout to 60s to accommodate qwen CLI response time with debug logging
+- **Non-Interactive Mode**: Fixed timeout issues by using qwen -p flag for non-interactive mode instead of stdin
 - Fixed MCP error -32602: Resolved output schema mismatch in `ask-qwen` and `sandbox-test` tools by removing custom output schemas and using standard MCP content format
 - Cleaned up git repository: Removed node_modules from tracking and ensured proper .gitignore configuration
 
