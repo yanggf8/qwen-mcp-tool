@@ -31,7 +31,8 @@ npm start
 
 ## Fixes
 
-- Fixed MCP error -32602: Resolved output schema mismatch in `ask-qwen` and `sandbox-test` tools where the returned values didn't match the declared output schemas.
+- Fixed MCP error -32602: Resolved output schema mismatch in `ask-qwen` and `sandbox-test` tools by removing custom output schemas and using standard MCP content format
+- Cleaned up git repository: Removed node_modules from tracking and ensured proper .gitignore configuration
 
 ## License
 

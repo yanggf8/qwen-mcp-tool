@@ -45,9 +45,6 @@ class QwenMCPServer {
       inputSchema: {
         prompt: z.string(),
         context: z.string().optional(),
-      },
-      outputSchema: {
-        response: z.string(),
       }
     }, async (input: { prompt: string; context?: string }) => {
       try {
@@ -63,13 +60,13 @@ class QwenMCPServer {
         const response = await qwenClient.ask(resolvedPrompt, input.context);
         
         return { 
-          response: response.content 
+          content: [{ type: 'text', text: response.content }]
         };
       } catch (error: unknown) {
         console.error('Error in ask-qwen tool:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return { 
-          response: `Error communicating with Qwen: ${errorMessage}` 
+          content: [{ type: 'text', text: `Error communicating with Qwen: ${errorMessage}` }]
         };
       }
     });
@@ -79,10 +76,6 @@ class QwenMCPServer {
       inputSchema: {
         code: z.string(),
         language: z.string().optional(),
-      },
-      outputSchema: {
-        output: z.string(),
-        error: z.string().optional(),
       }
     }, async (input: { code: string; language?: string }) => {
       try {
@@ -91,15 +84,15 @@ class QwenMCPServer {
         console.log(`Sandbox execution requested for ${input.language || 'unknown'} language`);
         
         // For demonstration purposes, just return the code that would have been executed
+        const output = `Code execution result:\n${input.code.substring(0, 200)}...`;
         return { 
-          output: `Code execution result:\n${input.code.substring(0, 200)}...`
+          content: [{ type: 'text', text: output }]
         };
       } catch (error: unknown) {
         console.error('Error in sandbox-test tool:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return { 
-          output: '', 
-          error: `Sandbox execution error: ${errorMessage}` 
+          content: [{ type: 'text', text: `Sandbox execution error: ${errorMessage}` }]
         };
       }
     });
