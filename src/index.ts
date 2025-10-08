@@ -53,7 +53,7 @@ class QwenMCPServer {
         
         // Create a Qwen client instance
         const qwenClient = new QwenClient({
-          timeout: 30000
+          timeout: 60000 // 60 seconds to match CLI response time
         });
         
         // Get response from Qwen

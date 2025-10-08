@@ -21,7 +21,7 @@ export class QwenClient {
 
   constructor(config: QwenConfig = {}) {
     this.config = {
-      timeout: 30000,
+      timeout: 60000, // Increased to 60 seconds
       model: 'qwen-max',
       ...config,
     };
@@ -50,6 +50,7 @@ export class QwenClient {
     }
 
     const fullPrompt = context ? `${context}\n\n${prompt}` : prompt;
+    console.log(`[QwenClient] Starting qwen process for prompt: ${fullPrompt.substring(0, 100)}...`);
     
     return new Promise((resolve) => {
       const qwen = spawn('qwen', [], {
@@ -59,24 +60,35 @@ export class QwenClient {
       let stdout = '';
       let stderr = '';
       let timeoutId: NodeJS.Timeout;
+      let resolved = false;
+
+      const resolveOnce = (result: QwenResponse) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          resolve(result);
+        }
+      };
 
       qwen.stdout.on('data', (data) => {
         stdout += data.toString();
+        console.log(`[QwenClient] Received stdout: ${data.toString().substring(0, 100)}...`);
       });
 
       qwen.stderr.on('data', (data) => {
         stderr += data.toString();
+        console.log(`[QwenClient] Received stderr: ${data.toString()}`);
       });
 
       qwen.on('close', (code) => {
-        clearTimeout(timeoutId);
+        console.log(`[QwenClient] Process closed with code: ${code}`);
         if (code === 0 && stdout.trim()) {
-          resolve({
+          resolveOnce({
             content: stdout.trim(),
             model: this.config.model || 'qwen-max'
           });
         } else {
-          resolve({
+          resolveOnce({
             content: '',
             model: this.config.model || 'qwen-max',
             error: stderr || `Process exited with code ${code}`
@@ -85,8 +97,8 @@ export class QwenClient {
       });
 
       qwen.on('error', (error) => {
-        clearTimeout(timeoutId);
-        resolve({
+        console.log(`[QwenClient] Process error: ${error.message}`);
+        resolveOnce({
           content: '',
           model: this.config.model || 'qwen-max',
           error: `Failed to start qwen process: ${error.message}`
@@ -95,17 +107,28 @@ export class QwenClient {
 
       // Set timeout
       timeoutId = setTimeout(() => {
+        console.log(`[QwenClient] Timeout after ${this.config.timeout}ms`);
         qwen.kill('SIGTERM');
-        resolve({
+        resolveOnce({
           content: '',
           model: this.config.model || 'qwen-max',
-          error: 'Request timeout'
+          error: `Request timeout after ${this.config.timeout}ms`
         });
       }, this.config.timeout);
 
       // Send prompt to stdin
-      qwen.stdin.write(fullPrompt);
-      qwen.stdin.end();
+      try {
+        qwen.stdin.write(fullPrompt);
+        qwen.stdin.end();
+        console.log(`[QwenClient] Sent prompt to qwen stdin`);
+      } catch (error) {
+        console.log(`[QwenClient] Error writing to stdin: ${error}`);
+        resolveOnce({
+          content: '',
+          model: this.config.model || 'qwen-max',
+          error: `Error writing to qwen stdin: ${error}`
+        });
+      }
     });
   }
 
