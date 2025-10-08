@@ -21,7 +21,7 @@ export class QwenClient {
 
   constructor(config: QwenConfig = {}) {
     this.config = {
-      timeout: 60000, // Increased to 60 seconds
+      timeout: 30000, // Reduced back to 30s for non-interactive mode
       model: 'qwen-max',
       ...config,
     };
@@ -53,7 +53,8 @@ export class QwenClient {
     console.log(`[QwenClient] Starting qwen process for prompt: ${fullPrompt.substring(0, 100)}...`);
     
     return new Promise((resolve) => {
-      const qwen = spawn('qwen', [], {
+      // Use -p flag for non-interactive mode
+      const qwen = spawn('qwen', ['-p', fullPrompt], {
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
@@ -116,19 +117,7 @@ export class QwenClient {
         });
       }, this.config.timeout);
 
-      // Send prompt to stdin
-      try {
-        qwen.stdin.write(fullPrompt);
-        qwen.stdin.end();
-        console.log(`[QwenClient] Sent prompt to qwen stdin`);
-      } catch (error) {
-        console.log(`[QwenClient] Error writing to stdin: ${error}`);
-        resolveOnce({
-          content: '',
-          model: this.config.model || 'qwen-max',
-          error: `Error writing to qwen stdin: ${error}`
-        });
-      }
+      console.log(`[QwenClient] Started qwen process with -p flag`);
     });
   }
 
